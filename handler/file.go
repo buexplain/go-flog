@@ -8,11 +8,14 @@ import (
 	"github.com/buexplain/go-flog"
 	"github.com/buexplain/go-flog/constant"
 	"io"
+	"io/ioutil"
 	libLog "log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -237,33 +240,31 @@ func (this *File) Handle(record *flog.Record) bool {
 		}
 		//寻找新的日志文件名
 		var logName string
-		//按日期进行切分
-		tmp := filepath.Join(this.path, record.Time.Format("2006-01-02"))
-		callipers := 0
-		for {
-			callipers++
-			logName = tmp + "." + strconv.Itoa(callipers) + ".log"
-			if _, err := os.Stat(logName); err == nil {
-				//文件已经存在，寻找下个日志文件名
-				continue
-			} else { //读取文件信息失败
-				if os.IsNotExist(err) {
-					//文件不存在错误，当前日志文件名可用
-					break
-				} else {
-					//其它错误，调用标准库日志打印错误
-					libLog.Println(err)
-					//判断寻找次数，是否大于某个常数
-					if callipers > CALLIPERS {
-						//强制返回false，让下一个日志handler继续处理日志信息
-						return false
-					}
-					//继续寻找下一个日志文件名
-					continue
-				}
-			}
+		var logNameIndex int
+		logNameIndex, err := findLogNameIndex(this.path);
+		if err != nil {
+			//关闭失败，打印日志
+			libLog.Println(err)
+			//强制返回false，让下一个日志handler继续处理日志信息
+			return false
+		}else if logNameIndex == -1 {
+			logName = filepath.Join(this.path, record.Time.Format("2006-01-02.log"))
+		}else {
+			logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex))
 		}
-
+		//检查日志文件名
+		if fi, err := os.Stat(logName); err == nil {
+			//文件已经存在，判断是否超出写入大小
+			if fi.Size() >= this.maxSize {
+				//超出大小，生成一个新的文件名
+				logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex + 1))
+			}
+		} else if !os.IsNotExist(err) {
+			//不是文件不存在错误，调用标准库日志打印错误
+			libLog.Println(err)
+			//强制返回false，让下一个日志handler继续处理日志信息
+			return false
+		}
 		//打开或创建日志文件
 		if f, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, this.perm); err == nil {
 			if fi, err := f.Stat(); err == nil {
@@ -301,4 +302,28 @@ func (this *File) Handle(record *flog.Record) bool {
 		//强制返回false，让下一个日志handler继续处理日志信息
 		return false
 	}
+}
+
+func findLogNameIndex(path string) (int, error) {
+	fiArr, err := ioutil.ReadDir(path)
+	if err != nil {
+		return  -1, err
+	}
+	reg := regexp.MustCompile(`^[\d]+-[\d]+-[\d]+([0-9\\.]*)\.log$`)
+	index := -1
+	for _, fi := range fiArr {
+		subArr := reg.FindStringSubmatch(fi.Name())
+		if len(subArr) == 0 {
+			continue
+		}
+		subArr[1] = strings.TrimLeft(subArr[1], ".")
+		if subArr[1] == "" {
+			continue
+		}
+		tmp, err := strconv.Atoi(subArr[1])
+		if err == nil  && tmp > index && strconv.Itoa(tmp) == subArr[1] {
+			index = tmp
+		}
+	}
+	return index, nil
 }
