@@ -20,9 +20,6 @@ import (
 	"time"
 )
 
-//当日日志分割次数
-const CALLIPERS = 999
-
 //文件日志处理器
 type File struct {
 	//日志等级
