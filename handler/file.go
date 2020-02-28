@@ -238,7 +238,7 @@ func (this *File) Handle(record *flog.Record) bool {
 		//寻找新的日志文件名
 		var logName string
 		var logNameIndex int
-		logNameIndex, err := findLogNameIndex(this.path);
+		logNameIndex, err := findLogNameIndex(this.path, record.Time.Format("2006-01-02"));
 		if err != nil {
 			//关闭失败，打印日志
 			libLog.Println(err)
@@ -301,12 +301,12 @@ func (this *File) Handle(record *flog.Record) bool {
 	}
 }
 
-func findLogNameIndex(path string) (int, error) {
+func findLogNameIndex(path string, date string) (int, error) {
 	fiArr, err := ioutil.ReadDir(path)
 	if err != nil {
 		return  -1, err
 	}
-	reg := regexp.MustCompile(`^[\d]+-[\d]+-[\d]+([0-9\\.]*)\.log$`)
+	reg := regexp.MustCompile(`^`+date+`([0-9\\.]*)\.log$`)
 	index := -1
 	for _, fi := range fiArr {
 		subArr := reg.FindStringSubmatch(fi.Name())
