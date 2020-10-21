@@ -211,8 +211,12 @@ func (this *Logger) AddRecord(level Level, format bool, message string, context 
 		record.Message = fmt.Sprintf(message, context...)
 	} else {
 		record.Message = message
-		if len(context) > 0 {
-			record.Context = context
+		if l := len(context); l > 0 {
+			if l == 1 {
+				record.Context = context[0]
+			} else {
+				record.Context = context
+			}
 		}
 	}
 

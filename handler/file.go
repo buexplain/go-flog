@@ -238,15 +238,15 @@ func (this *File) Handle(record *flog.Record) bool {
 		//寻找新的日志文件名
 		var logName string
 		var logNameIndex int
-		logNameIndex, err := findLogNameIndex(this.path, record.Time.Format("2006-01-02"));
+		logNameIndex, err := findLogNameIndex(this.path, record.Time.Format("2006-01-02"))
 		if err != nil {
 			//关闭失败，打印日志
 			libLog.Println(err)
 			//强制返回false，让下一个日志handler继续处理日志信息
 			return false
-		}else if logNameIndex == -1 {
+		} else if logNameIndex == -1 {
 			logName = filepath.Join(this.path, record.Time.Format("2006-01-02.log"))
-		}else {
+		} else {
 			logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex))
 		}
 		//检查日志文件名
@@ -254,7 +254,7 @@ func (this *File) Handle(record *flog.Record) bool {
 			//文件已经存在，判断是否超出写入大小
 			if fi.Size() >= this.maxSize {
 				//超出大小，生成一个新的文件名
-				logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex + 1))
+				logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex+1))
 			}
 		} else if !os.IsNotExist(err) {
 			//不是文件不存在错误，调用标准库日志打印错误
@@ -304,9 +304,9 @@ func (this *File) Handle(record *flog.Record) bool {
 func findLogNameIndex(path string, date string) (int, error) {
 	fiArr, err := ioutil.ReadDir(path)
 	if err != nil {
-		return  -1, err
+		return -1, err
 	}
-	reg := regexp.MustCompile(`^`+date+`([0-9\\.]*)\.log$`)
+	reg := regexp.MustCompile(`^` + date + `([0-9\\.]*)\.log$`)
 	index := -1
 	for _, fi := range fiArr {
 		subArr := reg.FindStringSubmatch(fi.Name())
@@ -318,7 +318,7 @@ func findLogNameIndex(path string, date string) (int, error) {
 			continue
 		}
 		tmp, err := strconv.Atoi(subArr[1])
-		if err == nil  && tmp > index && strconv.Itoa(tmp) == subArr[1] {
+		if err == nil && tmp > index && strconv.Itoa(tmp) == subArr[1] {
 			index = tmp
 		}
 	}

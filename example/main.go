@@ -9,7 +9,7 @@ import (
 
 var logger *flog.Logger
 
-func init()  {
+func init() {
 	h := handler.NewSTD(flog.LEVEL_DEBUG, formatter.NewLine(), flog.LEVEL_ERROR)
 	logger = flog.New("test", h, extra.NewFuncCaller(3))
 	fh := handler.NewFile(flog.LEVEL_DEBUG, formatter.NewLine(), "./example")
