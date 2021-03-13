@@ -5,8 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/buexplain/go-flog"
-	"github.com/buexplain/go-flog/constant"
+	"github.com/buexplain/go-flog/contract"
 	"io"
 	"io/ioutil"
 	libLog "log"
@@ -23,9 +22,9 @@ import (
 //文件日志处理器
 type File struct {
 	//日志等级
-	level flog.Level
+	level contract.Level
 	//日志格式化处理器
-	formatter flog.FormatterInterface
+	formatter contract.Formatter
 	//是否阻止进入下一个日志处理器
 	bubble bool
 	//日志写入路径
@@ -42,19 +41,23 @@ type File struct {
 	currentSize int64
 	//今日结束时间
 	todayEndUnix int64
+	//日志写入接口
+	w io.Writer
+	//处理器关闭锁
+	closeLock *sync.Mutex
+	//写入锁
+	writeLock *sync.Mutex
+	//文件日志处理器关闭状态
+	closed chan struct{}
 	//写入缓冲区
 	buffer *bufio.Writer
 	//写入缓冲区关闭状态
 	bufferClosed chan struct{}
 	//缓冲区冲刷时间间隔
 	flush time.Duration
-	//日志写入接口
-	w io.Writer
-	//文件日志处理器关闭状态
-	closed chan struct{}
 }
 
-func NewFile(level flog.Level, formatter flog.FormatterInterface, path string) *File {
+func NewFile(level contract.Level, formatter contract.Formatter, path string) *File {
 	tmp := new(File)
 	tmp.level = level
 	tmp.formatter = formatter
@@ -62,56 +65,58 @@ func NewFile(level flog.Level, formatter flog.FormatterInterface, path string) *
 	tmp.setPath(path)
 	tmp.perm = 0666
 	tmp.maxSize = 256 << 20
-	tmp.lock = new(sync.Mutex)
+	tmp.closeLock = new(sync.Mutex)
+	tmp.writeLock = new(sync.Mutex)
 	tmp.buffer = nil
 	tmp.closed = make(chan struct{})
 	return tmp
 }
 
-func (this *File) SetBuffer(buffer int, flush time.Duration) {
-	if this.buffer == nil {
-		//初始化缓冲区
-		this.buffer = bufio.NewWriterSize(nil, buffer)
-		this.flush = flush
-		this.bufferClosed = make(chan struct{})
-		//开启定时冲刷缓冲区的go程
-		go this.goF()
+func (r *File) SetBuffer(size int, flush time.Duration) {
+	if r.buffer == nil {
+		r.buffer = bufio.NewWriterSize(nil, size)
+		r.flush = flush
+		r.bufferClosed = make(chan struct{})
+		go r.goF()
 	}
 }
 
 //定时冲刷缓冲区
-func (this *File) goF() {
-	ticker := time.NewTicker(this.flush)
+func (r *File) goF() {
+	ticker := time.NewTicker(r.flush)
+	defer ticker.Stop()
 	defer func() {
-		ticker.Stop()
 		if a := recover(); a != nil {
-			//记录错误栈
-			var message string
-			message = fmt.Sprintf("File handler uncaught panic: %s", debug.Stack())
-			libLog.Println(message)
-			//重启一条go程
-			this.goF()
+			libLog.Println(fmt.Sprintf("File handler uncaught panic: %s", debug.Stack()))
+			r.goF()
 		} else {
-			//正常退出go程
-			close(this.bufferClosed)
+			close(r.bufferClosed)
 		}
 	}()
 	for {
 		select {
-		case <-this.closed:
-			return
-		default:
-			<-ticker.C
-			this.lock.Lock()
-			if err := this.buffer.Flush(); err != nil {
+		case <-r.closed:
+			r.writeLock.Lock()
+			if err := r.buffer.Flush(); err != nil {
+				r.writeLock.Unlock()
 				libLog.Println(err)
+			} else {
+				r.writeLock.Unlock()
 			}
-			this.lock.Unlock()
+			return
+		case <-ticker.C:
+			r.writeLock.Lock()
+			if err := r.buffer.Flush(); err != nil {
+				r.writeLock.Unlock()
+				libLog.Println(err)
+			} else {
+				r.writeLock.Unlock()
+			}
 		}
 	}
 }
 
-func (this *File) setPath(path string) {
+func (r *File) setPath(path string) {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
@@ -121,140 +126,116 @@ func (this *File) setPath(path string) {
 	if err := os.MkdirAll(path, os.ModeSetgid); err != nil {
 		libLog.Panicln(err)
 	}
-	this.path = path
+	r.path = path
 }
 
-func (this *File) GetPath() string {
-	return this.path
+func (r *File) GetPath() string {
+	return r.path
 }
 
-func (this *File) SetBubble(bubble bool) {
-	this.bubble = bubble
+func (r *File) SetBubble(bubble bool) {
+	r.bubble = bubble
 }
 
-func (this *File) SetPerm(perm os.FileMode) {
-	this.perm = perm
+func (r *File) SetPerm(perm os.FileMode) {
+	r.perm = perm
 }
 
-func (this *File) SetMaxSize(maxSize int64) {
+func (r *File) SetMaxSize(maxSize int64) {
 	if maxSize > 0 {
-		this.maxSize = maxSize
+		r.maxSize = maxSize
 	}
 }
 
-func (this *File) Close() error {
-	//获取锁
-	this.lock.Lock()
-	//退出的时候释放锁
-	defer this.lock.Unlock()
-
-	//判断是否关闭
+func (r *File) Close() error {
+	r.closeLock.Lock()
+	defer r.closeLock.Unlock()
 	select {
-	case <-this.closed:
+	case <-r.closed:
 		return nil
 	default:
 		break
 	}
-
-	//发出关闭信号
-	close(this.closed)
-
-	err := bytes.Buffer{}
-
-	//清空缓冲区
-	if this.buffer != nil {
-		//释放锁，让缓冲区冲刷go程有机会拿到锁
-		this.lock.Unlock()
-		//等待缓冲区冲刷go程结束
-		<-this.bufferClosed
-		//再次获取锁
-		this.lock.Lock()
-		//再次冲刷缓冲区
-		if e := this.buffer.Flush(); e != nil {
-			err.WriteString(e.Error())
-			err.WriteString(constant.EOF)
-		}
-		//释放缓冲区
-		this.buffer.Reset(nil)
-		this.buffer = nil
+	close(r.closed)
+	bag := bytes.Buffer{}
+	if r.buffer != nil {
+		<-r.bufferClosed
+		r.buffer.Reset(nil)
+		r.buffer = nil
 	}
-
-	//关闭文件指针
-	if this.file != nil {
-		if e := this.file.Close(); e != nil {
-			err.WriteString(e.Error())
-			err.WriteString(constant.EOF)
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+	if r.file != nil {
+		if e := r.file.Close(); e != nil {
+			bag.WriteString(e.Error())
+			bag.WriteByte('\n')
 		}
 	}
-
-	//返回错误信息
-	if err.Len() > 0 {
-		return errors.New(err.String())
+	if bag.Len() > 0 {
+		return errors.New(bag.String())
 	}
 	return nil
 }
 
-func (this *File) IsHandling(level flog.Level) bool {
-	return level <= this.level
+func (r *File) IsHandling(level contract.Level) bool {
+	return level <= r.level
 }
 
-func (this *File) Handle(record *flog.Record) bool {
-	//获取锁
-	this.lock.Lock()
-	defer this.lock.Unlock()
+func (r *File) Handle(record *contract.Record) bool {
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
 
-	//判断文件日志处理器处于关闭状态
 	select {
-	case <-this.closed:
-		//文件日志处理器处于关闭状态，不再处理日志，强制返回false，让下一个日志handler继续处理日志信息
+	case <-r.closed:
+		//强制返回false，让下一个日志handler继续处理日志信息
 		return false
 	default:
-		//继续处理日志
 		break
 	}
 
 	//当前日志文件指针不存在，或者当前日志文件已经写满，或者日期已经跳到了第二天，则创建新的日志文件指针
-	if this.file == nil || this.currentSize > this.maxSize || record.Time.Unix() > this.todayEndUnix {
+	if r.file == nil || r.currentSize >= r.maxSize || record.Time.Unix() > r.todayEndUnix {
 		//尝试关闭旧的日志文件指针
-		if this.file != nil {
+		if r.file != nil {
 			//先尝试刷新缓冲区中的缓冲
-			if this.buffer != nil {
-				if err := this.buffer.Flush(); err != nil {
+			if r.buffer != nil {
+				if err := r.buffer.Flush(); err != nil {
 					//刷新失败，打印日志
 					libLog.Println(err)
 				}
 			}
 			//开始关闭旧的日志文件指针
-			if err := this.file.Close(); err != nil {
+			if err := r.file.Close(); err != nil {
 				//关闭失败，打印日志
 				libLog.Println(err)
 				//强制返回false，让下一个日志handler继续处理日志信息
 				return false
 			} else {
 				//关闭成功，设置为nil
-				this.file = nil
+				r.file = nil
 			}
 		}
 		//寻找新的日志文件名
 		var logName string
 		var logNameIndex int
-		logNameIndex, err := findLogNameIndex(this.path, record.Time.Format("2006-01-02"))
+		var err error
+		logNameIndex, err = findLogNameIndex(r.path, record.Time.Format("2006-01-02"))
 		if err != nil {
 			//关闭失败，打印日志
 			libLog.Println(err)
 			//强制返回false，让下一个日志handler继续处理日志信息
 			return false
 		} else if logNameIndex == -1 {
-			logName = filepath.Join(this.path, record.Time.Format("2006-01-02.log"))
+			logName = filepath.Join(r.path, record.Time.Format("2006-01-02.log"))
 		} else {
-			logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex))
+			logName = filepath.Join(r.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex))
 		}
 		//检查日志文件名
 		if fi, err := os.Stat(logName); err == nil {
 			//文件已经存在，判断是否超出写入大小
-			if fi.Size() >= this.maxSize {
+			if fi.Size() >= r.maxSize {
 				//超出大小，生成一个新的文件名
-				logName = filepath.Join(this.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex+1))
+				logName = filepath.Join(r.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex+1))
 			}
 		} else if !os.IsNotExist(err) {
 			//不是文件不存在错误，调用标准库日志打印错误
@@ -263,18 +244,18 @@ func (this *File) Handle(record *flog.Record) bool {
 			return false
 		}
 		//打开或创建日志文件
-		if f, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, this.perm); err == nil {
+		if f, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, r.perm); err == nil {
 			if fi, err := f.Stat(); err == nil {
-				this.file = f
-				this.currentSize = fi.Size()
-				this.todayEndUnix = time.Date(record.Time.Year(), record.Time.Month(), record.Time.Day(), 23, 59, 59, 0, record.Time.Location()).Unix()
+				r.file = f
+				r.currentSize = fi.Size()
+				r.todayEndUnix = time.Date(record.Time.Year(), record.Time.Month(), record.Time.Day(), 23, 59, 59, 0, record.Time.Location()).Unix()
 				//设置日志写入接口
-				if this.buffer != nil {
+				if r.buffer != nil {
 					//开启日志缓冲，重置缓冲区
-					this.buffer.Reset(this.file)
-					this.w = this.buffer
+					r.buffer.Reset(r.file)
+					r.w = r.buffer
 				} else {
-					this.w = this.file
+					r.w = r.file
 				}
 			} else {
 				//错误，调用标准库日志打印错误
@@ -290,9 +271,9 @@ func (this *File) Handle(record *flog.Record) bool {
 		}
 	}
 
-	if n, err := this.formatter.Format(this.w, record); err == nil {
-		this.currentSize += int64(n)
-		return this.bubble
+	if n, err := r.formatter.ToWriter(r.w, record); err == nil {
+		r.currentSize += n
+		return r.bubble
 	} else {
 		//错误，调用标准库日志打印错误
 		libLog.Println(err)

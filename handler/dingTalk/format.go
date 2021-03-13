@@ -1,11 +1,13 @@
 package dingtalk
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/buexplain/go-flog"
+	"github.com/buexplain/go-flog/contract"
 	"io"
 	"strings"
+	"time"
 )
 
 type At struct {
@@ -25,15 +27,28 @@ type Text struct {
 
 type FormatText struct {
 	At *At
+	TimeFormat string
+}
+
+func (r *FormatText) SetAtMobile(mobile string) *FormatText {
+	r.At.AtMobiles = append(r.At.AtMobiles, mobile)
+	return r
+}
+
+
+func (r *FormatText) SetIsAtAll(isAtAll bool) *FormatText {
+	r.At.IsAtAll = isAtAll
+	return r
 }
 
 func NewFormatText() *FormatText {
 	return &FormatText{
 		At: &At{AtMobiles: []string{}, IsAtAll: false},
+		TimeFormat: time.RFC3339Nano,
 	}
 }
 
-func (r *FormatText) Format(w io.Writer, record *flog.Record) (n int, err error) {
+func (r *FormatText) format(record *contract.Record) (buf *bytes.Buffer, err error) {
 	body := Text{}
 	body.MsgType = "text"
 	body.At = &(*r.At)
@@ -41,7 +56,15 @@ func (r *FormatText) Format(w io.Writer, record *flog.Record) (n int, err error)
 		Content: "",
 	}
 	s := &strings.Builder{}
-	_, _ = fmt.Fprintf(s, "[%s] %s: %s", record.Time.Format("2006-01-02 15:04:05"), record.LevelName, record.Message)
+	s.WriteByte('[')
+	s.WriteString(record.Time.Format(r.TimeFormat))
+	s.WriteByte(']')
+	s.WriteByte(' ')
+	s.WriteString(record.Channel)
+	s.WriteByte('.')
+	s.WriteString(record.Level)
+	s.WriteByte(' ')
+	s.WriteString(record.Message)
 	if record.Context != nil {
 		_, _ = fmt.Fprintf(s, "\n%+v", record.Context)
 	}
@@ -51,6 +74,29 @@ func (r *FormatText) Format(w io.Writer, record *flog.Record) (n int, err error)
 		}
 	}
 	body.Text.Content = s.String()
-	e := json.NewEncoder(w)
-	return 0, e.Encode(body)
+	buf = bytes.NewBuffer(nil)
+	e := json.NewEncoder(buf)
+	err = e.Encode(body)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func (r *FormatText) ToBuffer(record *contract.Record) (buf *bytes.Buffer, err error) {
+	return r.format(record)
+}
+
+func (r *FormatText) ToWriter(w io.Writer, record *contract.Record) (written int64, err error) {
+	var buf *bytes.Buffer
+	buf, err = r.ToBuffer(record)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	n , err = w.Write(buf.Bytes())
+	if err != nil {
+		return 0, err
+	}
+	return int64(n), nil
 }

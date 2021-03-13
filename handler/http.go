@@ -2,19 +2,21 @@ package handler
 
 import (
 	"bytes"
-	"github.com/buexplain/go-flog"
+	"github.com/buexplain/go-flog/contract"
+	formatter2 "github.com/buexplain/go-flog/formatter"
 	"io/ioutil"
 	libLog "log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
 //http接口日志处理器
 type HTTP struct {
 	//日志等级
-	level flog.Level
+	level contract.Level
 	//日志格式化处理器
-	formatter flog.FormatterInterface
+	formatter contract.Formatter
 	//是否阻止进入下一个日志处理器
 	bubble bool
 	//日志写入地址
@@ -25,77 +27,78 @@ type HTTP struct {
 	timeout time.Duration
 }
 
-func NewHTTP(level flog.Level, formatter flog.FormatterInterface, url string) *HTTP {
+func NewHTTP(level contract.Level, formatter contract.Formatter, url string) *HTTP {
 	tmp := new(HTTP)
 	tmp.level = level
 	tmp.formatter = formatter
 	tmp.bubble = false
 	tmp.url = url
 	tmp.header = make(http.Header, 0)
-	tmp.header.Set("Content-Type", "text/plain; charset=utf-8")
-	tmp.timeout = time.Duration(1500 * time.Millisecond)
+	if _, ok := formatter.(*formatter2.JSON); ok {
+		tmp.header.Set("Content-Type", "application/json; charset=utf-8")
+	}else {
+		tmp.header.Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	tmp.timeout = 5 * time.Second
 	return tmp
 }
 
-func (this *HTTP) SetBubble(bubble bool) *HTTP {
-	this.bubble = bubble
-	return this
+func (r *HTTP) SetBubble(bubble bool) *HTTP {
+	r.bubble = bubble
+	return r
 }
 
-func (this *HTTP) SetHeader(h http.Header) *HTTP {
-	this.header = h
-	return this
+func (r *HTTP) SetHeader(h http.Header) *HTTP {
+	r.header = h
+	return r
 }
 
-func (this *HTTP) SetTimeout(t time.Duration) *HTTP {
-	this.timeout = t
-	return this
+func (r *HTTP) SetTimeout(t time.Duration) *HTTP {
+	r.timeout = t
+	return r
 }
 
-func (this *HTTP) Close() error {
+func (r *HTTP) Close() error {
 	return nil
 }
 
 //判断当前处理器是否可以处理日志
-func (this *HTTP) IsHandling(level flog.Level) bool {
-	return level <= this.level
+func (r *HTTP) IsHandling(level contract.Level) bool {
+	return level <= r.level
 }
 
 //处理器入口
-func (this *HTTP) Handle(record *flog.Record) bool {
-	request, err := http.NewRequest(http.MethodPost, this.url, nil)
+func (r *HTTP) Handle(record *contract.Record) bool {
+	request, err := http.NewRequest(http.MethodPost, r.url, nil)
 	if err != nil {
-		//错误，调用标准库日志打印错误
 		libLog.Println(err)
-		//强制返回false，让下一个日志handler继续处理日志信息
 		return false
 	}
 
 	//克隆头部信息
-	for k, vv := range this.header {
+	for k, vv := range r.header {
 		vv2 := make([]string, len(vv))
 		copy(vv2, vv)
 		request.Header[k] = vv2
 	}
 
 	//设置请求体
-	buf := &bytes.Buffer{}
-	if _, err := this.formatter.Format(buf, record); err != nil {
-		//错误，调用标准库日志打印错误
+	var buf *bytes.Buffer
+	buf, err = r.formatter.ToBuffer(record)
+	if err != nil {
 		libLog.Println(err)
-		//强制返回false，让下一个日志handler继续处理日志信息
 		return false
 	}
 	request.Body = ioutil.NopCloser(buf)
 
-	client := &http.Client{Timeout: this.timeout}
+	client := http.Client{Timeout: r.timeout}
 	_, err = client.Do(request)
 	if err != nil {
-		//错误，调用标准库日志打印错误
-		libLog.Println(err)
-		//强制返回false，让下一个日志handler继续处理日志信息
+		if e, ok := err.(*url.Error); !ok || !e.Timeout() {
+			libLog.Println(err)
+		}
 		return false
 	}
 
-	return this.bubble
+	return r.bubble
 }

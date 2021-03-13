@@ -1,11 +1,10 @@
 package formatter
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/buexplain/go-flog"
-	"github.com/buexplain/go-flog/constant"
+	"github.com/buexplain/go-flog/contract"
 	"io"
-	"strings"
 	"time"
 )
 
@@ -17,39 +16,60 @@ type Line struct {
 
 func NewLine() *Line {
 	tmp := new(Line)
-	tmp.eof = []byte(constant.EOF)
-	tmp.timeFormat = time.RFC3339
+	tmp.eof = []byte{'\n'}
+	tmp.timeFormat = time.RFC3339Nano
 	return tmp
 }
 
-func (this *Line) SetEOF(eof []byte) *Line {
-	this.eof = eof
-	return this
+func (r *Line) SetTimeFormat(format string) *Line {
+	r.timeFormat = format
+	return r
 }
 
-func (this *Line) SetTimeFormat(format string) *Line {
-	this.timeFormat = format
-	return this
-}
-
-func (this *Line) Format(w io.Writer, record *flog.Record) (n int, err error) {
-	a := make([]interface{}, 0, 2)
+func (r *Line) format(record *contract.Record) (buf *bytes.Buffer, err error) {
+	buf = &bytes.Buffer{}
+	buf.WriteByte('[')
+	buf.WriteString(record.Time.Format(r.timeFormat))
+	buf.WriteByte(']')
+	buf.WriteByte(' ')
+	buf.WriteString(record.Channel)
+	buf.WriteByte('.')
+	buf.WriteString(record.Level)
+	buf.WriteByte(' ')
+	buf.WriteString(record.Message)
 	if record.Context != nil {
-		a = append(a, record.Context)
+		_, _ = fmt.Fprintf(buf, " %+v", record.Context)
 	}
-	if len(record.Extra) != 0 {
-		a = append(a, record.Extra)
+	if record.Extra != nil {
+		l := len(record.Extra)
+		i := 1
+		for k, v := range record.Extra {
+			if i == l {
+				_, _ = fmt.Fprintf(buf, " %s: %+v", k, v)
+			}else {
+				_, _ = fmt.Fprintf(buf, " %s: %+v,", k, v)
+			}
+			i++
+		}
 	}
-	if len(a) == 0 {
-		return fmt.Fprintf(w, "[%s] %s.%s: %s %s", record.Time.Format(this.timeFormat), record.Channel, record.LevelName, record.Message, this.eof)
+	buf.WriteByte('\n')
+	return
+}
+
+func (r *Line) ToBuffer(record *contract.Record) (buf *bytes.Buffer, err error) {
+	return r.format(record)
+}
+
+func (r *Line) ToWriter(w io.Writer, record *contract.Record) (written int64, err error) {
+	var buf *bytes.Buffer
+	buf, err = r.format(record)
+	if err != nil {
+		return 0, err
 	}
-	f := "[%s] %s.%s: %s" + strings.Repeat(" %+v", len(a)) + "%s"
-	b := make([]interface{}, 0, 7)
-	b = append(b, record.Time.Format(this.timeFormat))
-	b = append(b, record.Channel)
-	b = append(b, record.LevelName)
-	b = append(b, record.Message)
-	b = append(b, a...)
-	b = append(b, this.eof)
-	return fmt.Fprintf(w, f, b...)
+	var n int
+	n , err = w.Write(buf.Bytes())
+	if err != nil {
+		return 0, err
+	}
+	return int64(n), nil
 }

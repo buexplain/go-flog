@@ -1,21 +1,19 @@
 package extra
 
 import (
-	"github.com/buexplain/go-flog"
+	"github.com/buexplain/go-flog/contract"
 	"net"
 )
 
 //本机ip地址
-type IP struct {
-	ip string
-}
+type IP string
 
-func NewIP() *IP {
-	tmp := new(IP)
-	if addrs, err := net.InterfaceAddrs(); err == nil {
-		for _, addr := range addrs {
+func NewIP() IP {
+	var tmp IP
+	if address, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range address {
 			if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.IsLoopback() == false && ipNet.IP.IsGlobalUnicast() == true {
-				tmp.ip = ipNet.IP.String()
+				tmp = IP(ipNet.IP.String())
 				break
 			}
 		}
@@ -23,6 +21,6 @@ func NewIP() *IP {
 	return tmp
 }
 
-func (this *IP) Processor(record *flog.Record) {
-	record.Extra["IP"] = this.ip
+func (this IP) Processor(record *contract.Record) {
+	record.Extra["IP"] = string(this)
 }

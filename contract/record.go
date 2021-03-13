@@ -1,4 +1,4 @@
-package flog
+package contract
 
 import "time"
 
@@ -6,10 +6,8 @@ import "time"
 type Record struct {
 	//渠道
 	Channel string
-	//等级
-	Level Level
 	//等级名称
-	LevelName string
+	Level string
 	//信息
 	Message string
 	//上下文

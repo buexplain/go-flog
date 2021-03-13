@@ -1,6 +1,6 @@
-package flog
+package contract
 
 //添加日志额外信息的接口
-type ExtraInterface interface {
+type Extra interface {
 	Processor(record *Record)
 }

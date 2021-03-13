@@ -1,7 +1,7 @@
 package extra
 
 import (
-	"github.com/buexplain/go-flog"
+	"github.com/buexplain/go-flog/contract"
 	"runtime"
 )
 
@@ -22,7 +22,7 @@ func (this *FuncCaller) SetSkip(skip int) *FuncCaller {
 	return this
 }
 
-func (this *FuncCaller) Processor(record *flog.Record) {
+func (this *FuncCaller) Processor(record *contract.Record) {
 	if _, file, line, ok := runtime.Caller(this.skip); ok {
 		record.Extra["File"] = file
 		record.Extra["Line"] = line

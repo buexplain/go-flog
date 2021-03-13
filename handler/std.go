@@ -1,66 +1,61 @@
 package handler
 
 import (
-	"github.com/buexplain/go-flog"
-	libLog "log"
+	"github.com/buexplain/go-flog/contract"
 	"os"
 )
 
 //标准输出与标准出错日志处理器
 type STD struct {
 	//日志等级
-	level flog.Level
+	level contract.Level
 	//日志格式化处理器
-	formatter flog.FormatterInterface
+	formatter contract.Formatter
 	//是否阻止进入下一个日志处理器
 	bubble bool
 	//标准输出与标准错误分割的日志等级
-	splitLevel flog.Level
+	dst contract.Level
 }
 
-func NewSTD(level flog.Level, formatter flog.FormatterInterface, splitLevel flog.Level) *STD {
+func NewSTD(level contract.Level, formatter contract.Formatter, dst contract.Level) *STD {
 	tmp := new(STD)
 	tmp.level = level
 	tmp.formatter = formatter
 	tmp.bubble = false
-	tmp.splitLevel = splitLevel
+	tmp.dst = dst
 	return tmp
 }
 
-func (this *STD) SetBubble(bubble bool) *STD {
-	this.bubble = bubble
-	return this
+func (r *STD) SetBubble(bubble bool) *STD {
+	r.bubble = bubble
+	return r
 }
 
-func (this *STD) Close() error {
+func (r *STD) Close() error {
 	return nil
 }
 
 //判断当前处理器是否可以处理日志
-func (this *STD) IsHandling(level flog.Level) bool {
-	return level <= this.level
+func (r *STD) IsHandling(level contract.Level) bool {
+	return level <= r.level
 }
 
 //处理器入口
-func (this *STD) Handle(record *flog.Record) bool {
+func (r *STD) Handle(record *contract.Record) bool {
 	var err error
-	if this.splitLevel < 0 {
-		//全部都打印到标准输出
-		_, err = this.formatter.Format(os.Stdout, record)
+	if r.dst == -1 {
+		_, err = r.formatter.ToWriter(os.Stdout, record)
 	} else {
-		if record.Level <= this.splitLevel {
-			//打印到标准出错
-			_, err = this.formatter.Format(os.Stderr, record)
+		if contract.GetLevelByName(record.Level) <= r.dst {
+			_, err = r.formatter.ToWriter(os.Stderr, record)
 		} else {
-			//打印到标准输出
-			_, err = this.formatter.Format(os.Stdout, record)
+			_, err = r.formatter.ToWriter(os.Stdout, record)
 		}
 	}
 	if err != nil {
-		//错误，调用标准库日志打印错误
-		libLog.Println(err)
-		//强制返回false，让下一个日志handler继续处理日志信息
+		//强制返回false
+		//让下一个日志handler继续处理日志信息
 		return false
 	}
-	return this.bubble
+	return r.bubble
 }

@@ -1,16 +1,16 @@
-package flog
+package contract
 
 /**
  * 日志等级接口
  * @see https://tools.ietf.org/html/rfc5424
  */
-type LoggerInterface interface {
+type Logger interface {
 	/**
 	 * 紧急情况：系统无法使用
 	 */
 	Emergency(message string, context ...interface{})
 	EmergencyF(format string, v ...interface{})
-
+	
 	/**
 	 * 警报：必须立即采取措施
 	 */

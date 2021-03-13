@@ -1,8 +1,9 @@
 package formatter
 
 import (
+	"bytes"
 	"encoding/json"
-	"github.com/buexplain/go-flog"
+	"github.com/buexplain/go-flog/contract"
 	"io"
 )
 
@@ -18,20 +19,38 @@ func NewJSON() *JSON {
 	return tmp
 }
 
-func (this *JSON) SetIndent(prefix, indent string) *JSON {
-	this.prefix = prefix
-	this.indent = indent
-	return this
+func (r *JSON) SetIndent(prefix, indent string) *JSON {
+	r.prefix = prefix
+	r.indent = indent
+	return r
 }
 
-func (this *JSON) SetEscapeHTML(on bool) *JSON {
-	this.escapeHTML = on
-	return this
+func (r *JSON) SetEscapeHTML(on bool) *JSON {
+	r.escapeHTML = on
+	return r
 }
 
-func (this *JSON) Format(w io.Writer, record *flog.Record) (int, error) {
-	e := json.NewEncoder(w)
-	e.SetIndent(this.prefix, this.indent)
-	e.SetEscapeHTML(this.escapeHTML)
-	return 0, e.Encode(record)
+func (r *JSON) ToBuffer(record *contract.Record) (buf *bytes.Buffer, err error) {
+	buf = &bytes.Buffer{}
+	e := json.NewEncoder(buf)
+	e.SetIndent(r.prefix, r.indent)
+	e.SetEscapeHTML(r.escapeHTML)
+	if err := e.Encode(record); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func (r *JSON) ToWriter(w io.Writer, record *contract.Record) (written int64, err error) {
+	var buf *bytes.Buffer
+	buf, err = r.ToBuffer(record)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	n , err = w.Write(buf.Bytes())
+	if err != nil {
+		return 0, err
+	}
+	return int64(n), nil
 }

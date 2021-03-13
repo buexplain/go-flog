@@ -1,7 +1,7 @@
-package flog
+package contract
 
 //日志处理器接口
-type HandlerInterface interface {
+type Handler interface {
 	//处理器入口
 	Handle(record *Record) bool
 	//判断当前处理器是否可以处理日志
