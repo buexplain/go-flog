@@ -5,7 +5,7 @@ import (
 	"runtime"
 )
 
-//函数调用文件与行号
+// FuncCaller 函数调用文件与行号
 type FuncCaller struct {
 	skip int
 }
@@ -17,13 +17,13 @@ func NewFuncCaller(skip ...int) *FuncCaller {
 	return &FuncCaller{skip: skip[0]}
 }
 
-func (this *FuncCaller) SetSkip(skip int) *FuncCaller {
-	this.skip = skip
-	return this
+func (r *FuncCaller) SetSkip(skip int) *FuncCaller {
+	r.skip = skip
+	return r
 }
 
-func (this *FuncCaller) Processor(record *contract.Record) {
-	if _, file, line, ok := runtime.Caller(this.skip); ok {
+func (r *FuncCaller) Processor(record *contract.Record) {
+	if _, file, line, ok := runtime.Caller(r.skip); ok {
 		record.Extra["File"] = file
 		record.Extra["Line"] = line
 	}

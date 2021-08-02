@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//日志收集齐器
+// Logger 日志收集齐器
 type Logger struct {
 	//渠道名称
 	channel string
@@ -251,9 +251,7 @@ func (r *Logger) dispatch(record *contract.Record) {
 	}
 }
 
-/**
- * 紧急情况：系统无法使用
- */
+// Emergency 紧急情况：系统无法使用
 func (r *Logger) Emergency(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelEmergency, false, message, context...)
 }
@@ -262,9 +260,7 @@ func (r *Logger) EmergencyF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelEmergency, true, format, v...)
 }
 
-/**
- *警报：必须立即采取措施
- */
+// Alert 警报：必须立即采取措施
 func (r *Logger) Alert(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelAlert, false, message, context...)
 }
@@ -273,9 +269,7 @@ func (r *Logger) AlertF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelAlert, true, format, v...)
 }
 
-/**
- * 严重：危急情况
- */
+// Critical 严重：危急情况
 func (r *Logger) Critical(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelCritical, false, message, context...)
 }
@@ -284,9 +278,7 @@ func (r *Logger) CriticalF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelCritical, true, format, v...)
 }
 
-/**
- * 错误
- */
+//错误
 func (r *Logger) Error(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelError, false, message, context...)
 }
@@ -295,9 +287,7 @@ func (r *Logger) ErrorF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelError, true, format, v...)
 }
 
-/**
- * 警告
- */
+// Warning 警告
 func (r *Logger) Warning(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelWarning, false, message, context...)
 }
@@ -306,9 +296,7 @@ func (r *Logger) WarningF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelWarning, true, format, v...)
 }
 
-/**
- * 注意：正常但重要条件
- */
+// Notice 注意：正常但重要条件
 func (r *Logger) Notice(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelNotice, false, message, context...)
 }
@@ -317,9 +305,7 @@ func (r *Logger) NoticeF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelNotice, true, format, v...)
 }
 
-/**
- * 信息
- */
+// Info 信息
 func (r *Logger) Info(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelInfo, false, message, context...)
 }
@@ -328,9 +314,7 @@ func (r *Logger) InfoF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelInfo, true, format, v...)
 }
 
-/**
- * 调试
- */
+// Debug 调试
 func (r *Logger) Debug(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelDebug, false, message, context...)
 }

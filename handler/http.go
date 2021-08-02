@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//http接口日志处理器
+// HTTP http接口日志处理器
 type HTTP struct {
 	//日志等级
 	level contract.Level
@@ -62,12 +62,12 @@ func (r *HTTP) Close() error {
 	return nil
 }
 
-//判断当前处理器是否可以处理日志
+// IsHandling 判断当前处理器是否可以处理日志
 func (r *HTTP) IsHandling(level contract.Level) bool {
 	return level <= r.level
 }
 
-//处理器入口
+// Handle 处理器入口
 func (r *HTTP) Handle(record *contract.Record) bool {
 	request, err := http.NewRequest(http.MethodPost, r.url, nil)
 	if err != nil {

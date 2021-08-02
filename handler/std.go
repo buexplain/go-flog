@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-//标准输出与标准出错日志处理器
+// STD 标准输出与标准出错日志处理器
 type STD struct {
 	//日志等级
 	level contract.Level
@@ -35,12 +35,12 @@ func (r *STD) Close() error {
 	return nil
 }
 
-//判断当前处理器是否可以处理日志
+// IsHandling 判断当前处理器是否可以处理日志
 func (r *STD) IsHandling(level contract.Level) bool {
 	return level <= r.level
 }
 
-//处理器入口
+// Handle 处理器入口
 func (r *STD) Handle(record *contract.Record) bool {
 	var err error
 	if r.dst == -1 {

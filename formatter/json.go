@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-//json化日志结构体
+// JSON json化日志结构体
 type JSON struct {
 	prefix     string
 	indent     string

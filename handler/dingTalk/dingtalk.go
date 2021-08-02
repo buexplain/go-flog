@@ -34,7 +34,7 @@ func New(level contract.Level, robots []*Robot, compress bool) *DingTalk {
 	return tmp
 }
 
-//处理器入口
+// Handle 处理器入口
 func (r *DingTalk) Handle(record *contract.Record) bool {
 	if r.compress {
 		r.writeLock.Lock()
@@ -58,12 +58,12 @@ func (r *DingTalk) Handle(record *contract.Record) bool {
 	return true
 }
 
-//判断当前处理器是否可以处理日志
+// IsHandling 判断当前处理器是否可以处理日志
 func (r *DingTalk) IsHandling(level contract.Level) bool {
 	return level <= r.level
 }
 
-//关闭日志处理器
+// Close 关闭日志处理器
 func (r *DingTalk) Close() error {
 	r.writeLock.Lock()
 	defer r.writeLock.Unlock()

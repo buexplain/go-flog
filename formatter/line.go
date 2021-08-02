@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-//行化日志结构体
+// Line 行化日志结构体
 type Line struct {
 	eof        []byte
 	timeFormat string
@@ -32,8 +32,10 @@ func (r *Line) format(record *contract.Record) (buf *bytes.Buffer, err error) {
 	buf.WriteString(record.Time.Format(r.timeFormat))
 	buf.WriteByte(']')
 	buf.WriteByte(' ')
-	buf.WriteString(record.Channel)
-	buf.WriteByte('.')
+	if len(record.Channel) > 0 {
+		buf.WriteString(record.Channel)
+		buf.WriteByte('.')
+	}
 	buf.WriteString(record.Level)
 	buf.WriteByte(' ')
 	buf.WriteString(record.Message)

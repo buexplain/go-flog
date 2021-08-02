@@ -1,51 +1,33 @@
 package contract
 
-//日志等级类型
+// Level 日志等级类型
 type Level int
 
-/**
- * 日志等级
- * @see https://tools.ietf.org/html/rfc5424
- */
+//日志等级
+//@see https://tools.ietf.org/html/rfc5424
 const (
-	/**
-	 * 紧急情况：系统无法使用
-	 */
+	// LevelEmergency 紧急情况：系统无法使用
 	LevelEmergency Level = iota
 
-	/**
-	 * 警报：必须立即采取措施
-	 */
+	// LevelAlert 警报：必须立即采取措施
 	LevelAlert
 
-	/**
-	 * 严重：危急情况
-	 */
+	// LevelCritical 严重：危急情况
 	LevelCritical
 
-	/**
-	 * 错误
-	 */
+	// LevelError 错误
 	LevelError
 
-	/**
-	 * 警告
-	 */
+	// LevelWarning 警告
 	LevelWarning
 
-	/**
-	 * 注意：正常但重要条件
-	 */
+	// LevelNotice 注意：正常但重要条件
 	LevelNotice
 
-	/**
-	 * 信息
-	 */
+	// LevelInfo 信息
 	LevelInfo
 
-	/**
-	 * 调试
-	 */
+	// LevelDebug 调试
 	LevelDebug
 )
 

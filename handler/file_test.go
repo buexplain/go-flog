@@ -1,9 +1,9 @@
-package handler_test
+package handler
 
 import (
+	"fmt"
 	"github.com/buexplain/go-flog/contract"
 	"github.com/buexplain/go-flog/formatter"
-	"github.com/buexplain/go-flog/handler"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,13 +12,66 @@ import (
 	"time"
 )
 
+//测试找到日期下最后一个日志文件的索引值
+func TestFindLogNameLastIndex(t *testing.T)  {
+	path, err := ioutil.TempDir("./", "test")
+	if err != nil {
+		t.Error("构建临时目录失败")
+	}
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	loop:
+	var index int
+	index, err = file.findLogNameLastIndex(time.Now().Format("2006-01-02"))
+	if index != -1 {
+		t.Errorf("没有任何日志文件情况下，期待返回结果是 -1 当前返回结果是 %d", index)
+	}
+	createLogFile := func(index int) {
+		var name string
+		if index > -1 {
+			name = time.Now().Format("2006-01-02")+fmt.Sprintf(".%d.log", index)
+		}else {
+			name = time.Now().Format("2006-01-02.log")
+		}
+		if file.prefix != "" {
+			name = file.prefix+"-"+name
+		}
+		//t.Log("创建日志文件 "+name)
+		name = filepath.Join(path, name)
+		f, err := os.Create(name)
+		if err != nil {
+			t.Error(err)
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+	}
+	indexArr := []int{-1,0,1,2,3,5,8,10,16}
+	for _, targetIndex := range indexArr {
+		createLogFile(targetIndex)
+		index, err = file.findLogNameLastIndex(time.Now().Format("2006-01-02"))
+		if index != targetIndex {
+			t.Errorf("期待返回结果是 %d 当前返回结果是 %d", targetIndex, index)
+		}
+	}
+	if file.prefix == "" {
+		file.SetPrefix("push")
+		goto loop
+	}
+	if err  := file.Close(); err != nil {
+		t.Error("日志处理测试失败：", err)
+	}
+	if err := os.RemoveAll(path); err != nil {
+		t.Error("日志处理器的文件未关闭：", err)
+	}
+}
+
 //测试同步写入日志
 func TestFileAwait(t *testing.T) {
 	path, err := ioutil.TempDir("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
 	file.SetMaxSize(1024*1024*256)
 	record := contract.NewRecord()
 	record.Extra["extraA"] = "extra"
@@ -52,6 +105,7 @@ func TestFileAwait(t *testing.T) {
 		t.Error("获取日志处理的结果失败：", err)
 	}else if len(m) != 1 {
 		t.Error("获取日志处理的输出结果不一致：", err)
+		os.Exit(1)
 	}else {
 		fi, err = os.Stat(m[0])
 		if err != nil {
@@ -89,7 +143,7 @@ func TestFileAsyncClose(t *testing.T) {
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewJSON(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewJSON(), path)
 	//设置一个2MiB的缓冲器，30秒刷新一次，保证日志都会写入到缓冲器中
 	file.SetBuffer(1024*1024*2, time.Second*30)
 	//设置一个超大的文件大小限制值，保证日志都冲刷到一个日志文件中，而不是触发文件大小限制导致切换文件的过程中强制刷新
@@ -163,7 +217,7 @@ func TestFileAsyncTicker(t *testing.T) {
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewJSON(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewJSON(), path)
 	//设置一个2MiB的缓冲器，每三秒定时刷新一次
 	file.SetBuffer(1024*1024*2, time.Second*3)
 	//设置一个超大的文件大小限制值，保证日志都冲刷到一个日志文件中，而不是触发文件大小限制导致切换文件的过程中强制刷新
@@ -215,7 +269,7 @@ func TestFileAsyncSpilt(t *testing.T) {
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
 	//设置一个极小字节、定时极长的缓冲器，保证每一条日志的写入都会撑爆缓冲器，迫使缓冲器主动刷新
 	file.SetBuffer(10, time.Second*20)
 	//设置一个极小的文件大小限制值，保证每一条日志都会写入到新的文件
@@ -266,7 +320,7 @@ func TestFileAsyncConcurrent(t *testing.T) {
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
 	//设置强制冒泡，当异步冲刷协程收到close信号后会返回false
 	file.SetBubble(true)
 	//设置一个2MiB的缓冲器，每三秒定时刷新一次
@@ -335,7 +389,7 @@ func TestFileAwaitConcurrent(t *testing.T) {
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
-	file := handler.NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
 	//设置强制冒泡，当异步冲刷协程收到close信号后会返回false
 	file.SetBubble(true)
 	//设置一个适中的文件大小限制值，保证日志有切割的机会

@@ -7,19 +7,17 @@ import (
 	"fmt"
 	"github.com/buexplain/go-flog/contract"
 	"io"
-	"io/ioutil"
 	libLog "log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
 
-//文件日志处理器
+// File 文件日志处理器
 type File struct {
 	//日志等级
 	level contract.Level
@@ -29,6 +27,8 @@ type File struct {
 	bubble bool
 	//日志写入路径
 	path string
+	//日志文件名字前缀
+	prefix string
 	//日志文件权限
 	perm os.FileMode
 	//单个日志文件最大写入大小，0则不做限制
@@ -133,6 +133,10 @@ func (r *File) GetPath() string {
 	return r.path
 }
 
+func (r *File) SetPrefix(prefix string)  {
+	r.prefix = prefix
+}
+
 func (r *File) SetBubble(bubble bool) {
 	r.bubble = bubble
 }
@@ -181,10 +185,118 @@ func (r *File) IsHandling(level contract.Level) bool {
 	return level <= r.level
 }
 
+//找到日期下最后一个日志文件的索引值
+func (r *File) findLogNameLastIndex(date string) (index int, err error) {
+	var entries []os.DirEntry
+	entries, err = os.ReadDir(r.path)
+	if err != nil {
+		return -1, err
+	}
+	var reg *regexp.Regexp
+	if r.prefix == "" {
+		reg = regexp.MustCompile(`^` + date + `[\.]*([0-9]*)\.log$`)
+	}else {
+		reg = regexp.MustCompile(`^` + r.prefix+ "-"+ date + `[\.]*([0-9]*)\.log$`)
+	}
+	index = -1
+	var currentIndex int
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		sub := reg.FindStringSubmatch(entry.Name())
+		if len(sub) != 2 || sub[1] == "" {
+			continue
+		}
+		currentIndex, err = strconv.Atoi(sub[1])
+		if err == nil && currentIndex > index {
+			index = currentIndex
+		}
+	}
+	return index, nil
+}
+
+// scanLogName 寻找新的日志文件名
+func (r *File) scanLogName(t time.Time) (name string, err error) {
+	var index int
+	index, err = r.findLogNameLastIndex(t.Format("2006-01-02"))
+	if err != nil {
+		return "", err
+	}
+	if index == -1 {
+		name = filepath.Join(r.path, t.Format("2006-01-02.log"))
+	} else {
+		name = filepath.Join(r.path, t.Format("2006-01-02")+fmt.Sprintf(".%d.log", index))
+	}
+	//检查日志文件名
+	var fi os.FileInfo
+	fi, err = os.Stat(name)
+	//文件已经存在
+	if err == nil {
+		if r.maxSize > 0 && fi.Size() >= r.maxSize {
+			//超出写入大小限制，生成一个新的文件名
+			name = filepath.Join(r.path, t.Format("2006-01-02")+fmt.Sprintf(".%d.log", index+1))
+		}
+		return name, nil
+	}
+	//出错了，并且不是：文件不存在错误
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	//文件不存在，可以使用该名字
+	return name, nil
+}
+
+// closeFile 关闭当前的日志文件
+func (r *File) closeFile() error {
+	if r.file == nil {
+		return nil
+	}
+	//检查缓冲区，并刷新缓冲区
+	if r.buffer != nil {
+		if err := r.buffer.Flush(); err != nil {
+			return err
+		}
+	}
+	//关闭旧的日志文件指针
+	if err := r.file.Close(); err != nil {
+		return err
+	}
+	//关闭成功，设置为nil
+	r.file = nil
+	return nil
+}
+
+// openFile 打开或创建日志文件
+func (r *File) openFile(logName string, t time.Time) error {
+	//打开日志文件
+	f, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, r.perm)
+	if err != nil {
+		return err
+	}
+	var fi os.FileInfo
+	fi, err = f.Stat()
+	if err != nil {
+		return err
+	}
+	//记录文件信息到当前对象
+	r.file = f
+	r.currentSize = fi.Size()
+	r.todayEndUnix = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location()).Unix()
+	//检查是否开启日志缓冲
+	if r.buffer == nil {
+		r.w = r.file
+		return nil
+	}
+	//重置缓冲区
+	r.buffer.Reset(r.file)
+	r.w = r.buffer
+	return nil
+}
+
 func (r *File) Handle(record *contract.Record) bool {
 	r.writeLock.Lock()
 	defer r.writeLock.Unlock()
-
 	select {
 	case <-r.closed:
 		//强制返回false，让下一个日志handler继续处理日志信息
@@ -192,85 +304,27 @@ func (r *File) Handle(record *contract.Record) bool {
 	default:
 		break
 	}
-
 	//当前日志文件指针不存在，或者当前日志文件已经写满，或者日期已经跳到了第二天，则创建新的日志文件指针
 	if r.file == nil || r.currentSize >= r.maxSize || record.Time.Unix() > r.todayEndUnix {
-		//尝试关闭旧的日志文件指针
-		if r.file != nil {
-			//先尝试刷新缓冲区中的缓冲
-			if r.buffer != nil {
-				if err := r.buffer.Flush(); err != nil {
-					//刷新失败，打印日志
-					libLog.Println(err)
-				}
-			}
-			//开始关闭旧的日志文件指针
-			if err := r.file.Close(); err != nil {
-				//关闭失败，打印日志
-				libLog.Println(err)
-				//强制返回false，让下一个日志handler继续处理日志信息
-				return false
-			} else {
-				//关闭成功，设置为nil
-				r.file = nil
-			}
-		}
-		//寻找新的日志文件名
-		var logName string
-		var logNameIndex int
 		var err error
-		logNameIndex, err = findLogNameIndex(r.path, record.Time.Format("2006-01-02"))
+		//关闭旧的日志文件
+		err = r.closeFile()
+		if err == nil {
+			//寻找新的日志文件名
+			var logName string
+			logName, err = r.scanLogName(record.Time)
+			if err == nil {
+				//打开或创建日志文件
+				err = r.openFile(logName, record.Time)
+			}
+		}
 		if err != nil {
-			//关闭失败，打印日志
-			libLog.Println(err)
-			//强制返回false，让下一个日志handler继续处理日志信息
-			return false
-		} else if logNameIndex == -1 {
-			logName = filepath.Join(r.path, record.Time.Format("2006-01-02.log"))
-		} else {
-			logName = filepath.Join(r.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex))
-		}
-		//检查日志文件名
-		if fi, err := os.Stat(logName); err == nil {
-			//文件已经存在，判断是否超出写入大小
-			if fi.Size() >= r.maxSize {
-				//超出大小，生成一个新的文件名
-				logName = filepath.Join(r.path, record.Time.Format("2006-01-02")+fmt.Sprintf(".%d.log", logNameIndex+1))
-			}
-		} else if !os.IsNotExist(err) {
-			//不是文件不存在错误，调用标准库日志打印错误
-			libLog.Println(err)
-			//强制返回false，让下一个日志handler继续处理日志信息
-			return false
-		}
-		//打开或创建日志文件
-		if f, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, r.perm); err == nil {
-			if fi, err := f.Stat(); err == nil {
-				r.file = f
-				r.currentSize = fi.Size()
-				r.todayEndUnix = time.Date(record.Time.Year(), record.Time.Month(), record.Time.Day(), 23, 59, 59, 0, record.Time.Location()).Unix()
-				//设置日志写入接口
-				if r.buffer != nil {
-					//开启日志缓冲，重置缓冲区
-					r.buffer.Reset(r.file)
-					r.w = r.buffer
-				} else {
-					r.w = r.file
-				}
-			} else {
-				//错误，调用标准库日志打印错误
-				libLog.Println(err)
-				//强制返回false，让下一个日志handler继续处理日志信息
-				return false
-			}
-		} else {
-			//错误，调用标准库日志打印错误
 			libLog.Println(err)
 			//强制返回false，让下一个日志handler继续处理日志信息
 			return false
 		}
 	}
-
+	//写入日志
 	if n, err := r.formatter.ToWriter(r.w, record); err == nil {
 		r.currentSize += n
 		return r.bubble
@@ -280,28 +334,4 @@ func (r *File) Handle(record *contract.Record) bool {
 		//强制返回false，让下一个日志handler继续处理日志信息
 		return false
 	}
-}
-
-func findLogNameIndex(path string, date string) (int, error) {
-	fiArr, err := ioutil.ReadDir(path)
-	if err != nil {
-		return -1, err
-	}
-	reg := regexp.MustCompile(`^` + date + `([0-9\\.]*)\.log$`)
-	index := -1
-	for _, fi := range fiArr {
-		subArr := reg.FindStringSubmatch(fi.Name())
-		if len(subArr) == 0 {
-			continue
-		}
-		subArr[1] = strings.TrimLeft(subArr[1], ".")
-		if subArr[1] == "" {
-			continue
-		}
-		tmp, err := strconv.Atoi(subArr[1])
-		if err == nil && tmp > index && strconv.Itoa(tmp) == subArr[1] {
-			index = tmp
-		}
-	}
-	return index, nil
 }

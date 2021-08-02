@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-//本机ip地址
+// IP 本机ip地址
 type IP string
 
 func NewIP() IP {
@@ -21,6 +21,6 @@ func NewIP() IP {
 	return tmp
 }
 
-func (this IP) Processor(record *contract.Record) {
-	record.Extra["IP"] = string(this)
+func (r IP) Processor(record *contract.Record) {
+	record.Extra["IP"] = string(r)
 }

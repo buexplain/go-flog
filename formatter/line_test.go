@@ -18,7 +18,7 @@ func TestLine(t *testing.T) {
 		Name: "西门吹雪",
 		Age: 108,
 	}
-	record.Channel = "channel"
+	//record.Channel = "channel"
 	record.Message = "message"
 	record.Context = struct {
 		A string
