@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/buexplain/go-flog/contract"
 	"github.com/buexplain/go-flog/formatter"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,19 +23,22 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
 	loop:
 	var index int
-	index, err = file.findLogNameLastIndex(time.Now().Format("2006-01-02"))
+	var layout string
+	if file.prefix == "" {
+		layout = "2006-01-02"
+	}else {
+		layout = file.prefix+"-2006-01-02"
+	}
+	index, err = file.findLogNameLastIndex(time.Now().Format(layout))
 	if index != -1 {
 		t.Errorf("没有任何日志文件情况下，期待返回结果是 -1 当前返回结果是 %d", index)
 	}
 	createLogFile := func(index int) {
 		var name string
 		if index > -1 {
-			name = time.Now().Format("2006-01-02")+fmt.Sprintf(".%d.log", index)
+			name = time.Now().Format(layout)+fmt.Sprintf(".%d.log", index)
 		}else {
-			name = time.Now().Format("2006-01-02.log")
-		}
-		if file.prefix != "" {
-			name = file.prefix+"-"+name
+			name = time.Now().Format(layout+".log")
 		}
 		//t.Log("创建日志文件 "+name)
 		name = filepath.Join(path, name)
@@ -48,14 +53,87 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 	indexArr := []int{-1,0,1,2,3,5,8,10,16}
 	for _, targetIndex := range indexArr {
 		createLogFile(targetIndex)
-		index, err = file.findLogNameLastIndex(time.Now().Format("2006-01-02"))
+		index, err = file.findLogNameLastIndex(time.Now().Format(layout))
 		if index != targetIndex {
 			t.Errorf("期待返回结果是 %d 当前返回结果是 %d", targetIndex, index)
 		}
 	}
 	if file.prefix == "" {
-		file.SetPrefix("push")
+		file.SetPrefix("test")
 		goto loop
+	}
+	if err  := file.Close(); err != nil {
+		t.Error("日志处理测试失败：", err)
+	}
+	if err := os.RemoveAll(path); err != nil {
+		t.Error("日志处理器的文件未关闭：", err)
+	}
+}
+
+//测试寻找可用日志文件名
+func TestScanLogName(t *testing.T)  {
+	path, err := ioutil.TempDir("./", "test")
+	if err != nil {
+		t.Error("构建临时目录失败")
+	}
+	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
+	prefixLoop:
+	var layout string
+	if file.prefix == "" {
+		layout = "2006-01-02"
+	}else {
+		layout = file.prefix+"-2006-01-02"
+	}
+	createLogFile := func(index int) {
+		var name string
+		if index > -1 {
+			name = time.Now().Format(layout)+fmt.Sprintf(".%d.log", index)
+		}else {
+			name = time.Now().Format(layout+".log")
+		}
+		//t.Log("创建日志文件 "+name)
+		name = filepath.Join(path, name)
+		f, err := os.Create(name)
+		if err != nil {
+			t.Error(err)
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+	}
+	loopIndex := 0
+	loop:
+	var name string
+	name, err = file.scanLogName(time.Now())
+	if err != nil {
+		t.Error("扫描可用日志文件错误", err)
+		return
+	}
+	targetName := time.Now().Format(layout)+".log"
+	if loopIndex == 2 {
+		//已有的日志文件超出可写入大小，目标日志文件的索引应该进入下一个
+		targetName = time.Now().Format(layout)+".0.log"
+	}
+	if strings.HasSuffix(name, targetName) == false {
+		t.Error("扫描可用日志文件错误，期待",targetName,"不期待", name)
+		return
+	}
+	//创建一个日志文件进去，测试已有的日志文件可以继续写入，没有超出可写入大小，再次扫描
+	if loopIndex == 0 {
+		createLogFile(-1)
+		loopIndex++
+		goto loop
+	}
+	//给创建的日志文件写入数据，测试已有的日志文件无法继续写入，已经超出可写入大小，再次扫描
+	if loopIndex == 1 {
+		file.SetMaxSize(2)
+		_ = os.WriteFile(name, []byte("给创建的日志文件写入数据，再次扫描"+file.prefix), fs.FileMode(0666))
+		loopIndex++
+		goto loop
+	}
+	if file.prefix == "" {
+		file.SetPrefix("test")
+		goto prefixLoop
 	}
 	if err  := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)

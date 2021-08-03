@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/buexplain/go-flog/contract"
 	"io"
+	"io/fs"
 	libLog "log"
 	"os"
 	"path/filepath"
@@ -63,7 +64,7 @@ func NewFile(level contract.Level, formatter contract.Formatter, path string) *F
 	tmp.formatter = formatter
 	tmp.bubble = false
 	tmp.setPath(path)
-	tmp.perm = 0666
+	tmp.perm = fs.FileMode(0666)
 	tmp.maxSize = 256 << 20
 	tmp.closeLock = new(sync.Mutex)
 	tmp.writeLock = new(sync.Mutex)
@@ -134,6 +135,13 @@ func (r *File) GetPath() string {
 }
 
 func (r *File) SetPrefix(prefix string)  {
+	if prefix == "" {
+		r.prefix = prefix
+		return
+	}
+	if match, _ := regexp.MatchString(`^[A-Za-z_0-9]+$`, prefix); !match {
+		libLog.Panicln(errors.New("invalid argument: "+prefix))
+	}
 	r.prefix = prefix
 }
 
@@ -146,7 +154,7 @@ func (r *File) SetPerm(perm os.FileMode) {
 }
 
 func (r *File) SetMaxSize(maxSize int64) {
-	if maxSize > 0 {
+	if maxSize >= 0 {
 		r.maxSize = maxSize
 	}
 }
@@ -186,18 +194,13 @@ func (r *File) IsHandling(level contract.Level) bool {
 }
 
 //找到日期下最后一个日志文件的索引值
-func (r *File) findLogNameLastIndex(date string) (index int, err error) {
+func (r *File) findLogNameLastIndex(layout string) (index int, err error) {
 	var entries []os.DirEntry
 	entries, err = os.ReadDir(r.path)
 	if err != nil {
 		return -1, err
 	}
-	var reg *regexp.Regexp
-	if r.prefix == "" {
-		reg = regexp.MustCompile(`^` + date + `[\.]*([0-9]*)\.log$`)
-	}else {
-		reg = regexp.MustCompile(`^` + r.prefix+ "-"+ date + `[\.]*([0-9]*)\.log$`)
-	}
+	reg := regexp.MustCompile(`^` + layout + `[\.]*([0-9]*)\.log$`)
 	index = -1
 	var currentIndex int
 	for _, entry := range entries {
@@ -219,14 +222,20 @@ func (r *File) findLogNameLastIndex(date string) (index int, err error) {
 // scanLogName 寻找新的日志文件名
 func (r *File) scanLogName(t time.Time) (name string, err error) {
 	var index int
-	index, err = r.findLogNameLastIndex(t.Format("2006-01-02"))
+	var layout string
+	if r.prefix == "" {
+		layout = "2006-01-02"
+	}else {
+		layout = r.prefix+"-2006-01-02"
+	}
+	index, err = r.findLogNameLastIndex(t.Format(layout))
 	if err != nil {
 		return "", err
 	}
 	if index == -1 {
-		name = filepath.Join(r.path, t.Format("2006-01-02.log"))
+		name = filepath.Join(r.path, t.Format(layout+".log"))
 	} else {
-		name = filepath.Join(r.path, t.Format("2006-01-02")+fmt.Sprintf(".%d.log", index))
+		name = filepath.Join(r.path, t.Format(layout)+fmt.Sprintf(".%d.log", index))
 	}
 	//检查日志文件名
 	var fi os.FileInfo
@@ -235,7 +244,7 @@ func (r *File) scanLogName(t time.Time) (name string, err error) {
 	if err == nil {
 		if r.maxSize > 0 && fi.Size() >= r.maxSize {
 			//超出写入大小限制，生成一个新的文件名
-			name = filepath.Join(r.path, t.Format("2006-01-02")+fmt.Sprintf(".%d.log", index+1))
+			name = filepath.Join(r.path, t.Format(layout)+fmt.Sprintf(".%d.log", index+1))
 		}
 		return name, nil
 	}
