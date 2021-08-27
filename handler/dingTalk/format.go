@@ -60,8 +60,10 @@ func (r *FormatText) format(record *contract.Record) (buf *bytes.Buffer, err err
 	s.WriteString(record.Time.Format(r.TimeFormat))
 	s.WriteByte(']')
 	s.WriteByte(' ')
-	s.WriteString(record.Channel)
-	s.WriteByte('.')
+	if len(record.Channel) > 0 {
+		s.WriteString(record.Channel)
+		s.WriteByte('.')
+	}
 	s.WriteString(record.Level)
 	s.WriteByte(' ')
 	s.WriteString(record.Message)
