@@ -5,7 +5,6 @@ import (
 	"github.com/buexplain/go-flog/contract"
 	"github.com/buexplain/go-flog/formatter"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,20 +13,20 @@ import (
 	"time"
 )
 
-//测试找到日期下最后一个日志文件的索引值
-func TestFindLogNameLastIndex(t *testing.T)  {
-	path, err := ioutil.TempDir("./", "test")
+// 测试找到日期下最后一个日志文件的索引值
+func TestFindLogNameLastIndex(t *testing.T) {
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
 	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
-	loop:
+loop:
 	var index int
 	var layout string
 	if file.prefix == "" {
 		layout = "2006-01-02"
-	}else {
-		layout = file.prefix+"-2006-01-02"
+	} else {
+		layout = file.prefix + "-2006-01-02"
 	}
 	index, err = file.findLogNameLastIndex(time.Now().Format(layout))
 	if index != -1 {
@@ -36,9 +35,9 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 	createLogFile := func(index int) {
 		var name string
 		if index > -1 {
-			name = time.Now().Format(layout)+fmt.Sprintf(".%d.log", index)
-		}else {
-			name = time.Now().Format(layout+".log")
+			name = time.Now().Format(layout) + fmt.Sprintf(".%d.log", index)
+		} else {
+			name = time.Now().Format(layout + ".log")
 		}
 		//t.Log("创建日志文件 "+name)
 		name = filepath.Join(path, name)
@@ -50,7 +49,7 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 			_ = f.Close()
 		}()
 	}
-	indexArr := []int{-1,0,1,2,3,5,8,10,16}
+	indexArr := []int{-1, 0, 1, 2, 3, 5, 8, 10, 16}
 	for _, targetIndex := range indexArr {
 		createLogFile(targetIndex)
 		index, err = file.findLogNameLastIndex(time.Now().Format(layout))
@@ -62,7 +61,7 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 		file.SetPrefix("test")
 		goto loop
 	}
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	if err := os.RemoveAll(path); err != nil {
@@ -70,26 +69,26 @@ func TestFindLogNameLastIndex(t *testing.T)  {
 	}
 }
 
-//测试寻找可用日志文件名
-func TestScanLogName(t *testing.T)  {
-	path, err := ioutil.TempDir("./", "test")
+// 测试寻找可用日志文件名
+func TestScanLogName(t *testing.T) {
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
 	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
-	prefixLoop:
+prefixLoop:
 	var layout string
 	if file.prefix == "" {
 		layout = "2006-01-02"
-	}else {
-		layout = file.prefix+"-2006-01-02"
+	} else {
+		layout = file.prefix + "-2006-01-02"
 	}
 	createLogFile := func(index int) {
 		var name string
 		if index > -1 {
-			name = time.Now().Format(layout)+fmt.Sprintf(".%d.log", index)
-		}else {
-			name = time.Now().Format(layout+".log")
+			name = time.Now().Format(layout) + fmt.Sprintf(".%d.log", index)
+		} else {
+			name = time.Now().Format(layout + ".log")
 		}
 		//t.Log("创建日志文件 "+name)
 		name = filepath.Join(path, name)
@@ -102,20 +101,20 @@ func TestScanLogName(t *testing.T)  {
 		}()
 	}
 	loopIndex := 0
-	loop:
+loop:
 	var name string
 	name, err = file.scanLogName(time.Now())
 	if err != nil {
 		t.Error("扫描可用日志文件错误", err)
 		return
 	}
-	targetName := time.Now().Format(layout)+".log"
+	targetName := time.Now().Format(layout) + ".log"
 	if loopIndex == 2 {
 		//已有的日志文件超出可写入大小，目标日志文件的索引应该进入下一个
-		targetName = time.Now().Format(layout)+".0.log"
+		targetName = time.Now().Format(layout) + ".0.log"
 	}
 	if strings.HasSuffix(name, targetName) == false {
-		t.Error("扫描可用日志文件错误，期待",targetName,"不期待", name)
+		t.Error("扫描可用日志文件错误，期待", targetName, "不期待", name)
 		return
 	}
 	//创建一个日志文件进去，测试已有的日志文件可以继续写入，没有超出可写入大小，再次扫描
@@ -135,7 +134,7 @@ func TestScanLogName(t *testing.T)  {
 		file.SetPrefix("test")
 		goto prefixLoop
 	}
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	if err := os.RemoveAll(path); err != nil {
@@ -143,29 +142,29 @@ func TestScanLogName(t *testing.T)  {
 	}
 }
 
-//测试同步写入日志
+// 测试同步写入日志
 func TestFileAwait(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
 	file := NewFile(contract.LevelDebug, formatter.NewLine(), path)
-	file.SetMaxSize(1024*1024*256)
+	file.SetMaxSize(1024 * 1024 * 256)
 	record := contract.NewRecord()
 	record.Extra["extraA"] = "extra"
 	record.Extra["extraB"] = 100
 	record.Extra["extraC"] = struct {
 		Name string
-		Age uint8
+		Age  uint8
 	}{
 		Name: "西门吹雪",
-		Age: 108,
+		Age:  108,
 	}
 	record.Channel = "channel"
 	record.Message = "message"
 	record.Context = struct {
 		A string
-		B struct{
+		B struct {
 			C int
 		}
 	}{A: "context", B: struct {
@@ -181,10 +180,10 @@ func TestFileAwait(t *testing.T) {
 	var fi os.FileInfo
 	if m, err := filepath.Glob(filepath.Join(path, "*.log")); err != nil {
 		t.Error("获取日志处理的结果失败：", err)
-	}else if len(m) != 1 {
+	} else if len(m) != 1 {
 		t.Error("获取日志处理的输出结果不一致：", err)
 		os.Exit(1)
-	}else {
+	} else {
 		fi, err = os.Stat(m[0])
 		if err != nil {
 			t.Error("获取日志处理的输出结果失败", err)
@@ -196,7 +195,7 @@ func TestFileAwait(t *testing.T) {
 		}
 	}
 	//关闭日志处理器，此时并不会改变现有日志文件的大小，因为没有异步的情况
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	//检查磁盘的日志文件大小
@@ -215,9 +214,9 @@ func TestFileAwait(t *testing.T) {
 	}
 }
 
-//测试异步缓冲关闭时候落盘
+// 测试异步缓冲关闭时候落盘
 func TestFileAsyncClose(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
@@ -225,22 +224,22 @@ func TestFileAsyncClose(t *testing.T) {
 	//设置一个2MiB的缓冲器，30秒刷新一次，保证日志都会写入到缓冲器中
 	file.SetBuffer(1024*1024*2, time.Second*30)
 	//设置一个超大的文件大小限制值，保证日志都冲刷到一个日志文件中，而不是触发文件大小限制导致切换文件的过程中强制刷新
-	file.SetMaxSize(1024*1024*256)
+	file.SetMaxSize(1024 * 1024 * 256)
 	record := contract.NewRecord()
 	record.Extra["extraA"] = "extra"
 	record.Extra["extraB"] = 100
 	record.Extra["extraC"] = struct {
 		Name string
-		Age uint8
+		Age  uint8
 	}{
 		Name: "西门吹雪",
-		Age: 108,
+		Age:  108,
 	}
 	record.Channel = "channel"
 	record.Message = "message"
 	record.Context = struct {
 		A string
-		B struct{
+		B struct {
 			C int
 		}
 	}{A: "context", B: struct {
@@ -252,14 +251,14 @@ func TestFileAsyncClose(t *testing.T) {
 		tmp.Level = contract.GetNameByLevel(v)
 		file.Handle(tmp)
 	}
-	<- time.After(time.Second*1)
+	<-time.After(time.Second * 1)
 	//此时文件没有数据，检查是否符合要求
 	var fi os.FileInfo
 	if m, err := filepath.Glob(filepath.Join(path, "*.log")); err != nil {
 		t.Error("获取日志处理的结果失败：", err)
-	}else if len(m) != 1 {
+	} else if len(m) != 1 {
 		t.Error("获取日志处理的输出结果不一致：", err)
-	}else {
+	} else {
 		fi, err = os.Stat(m[0])
 		if err != nil {
 			t.Error("获取日志处理的输出结果失败", err)
@@ -271,7 +270,7 @@ func TestFileAsyncClose(t *testing.T) {
 		}
 	}
 	//关闭日志处理器，此时会强制刷新到磁盘
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	//检查磁盘的日志文件是否已经有内容
@@ -289,9 +288,9 @@ func TestFileAsyncClose(t *testing.T) {
 	}
 }
 
-//测试异步缓冲定时刷新落盘
+// 测试异步缓冲定时刷新落盘
 func TestFileAsyncTicker(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
@@ -299,22 +298,22 @@ func TestFileAsyncTicker(t *testing.T) {
 	//设置一个2MiB的缓冲器，每三秒定时刷新一次
 	file.SetBuffer(1024*1024*2, time.Second*3)
 	//设置一个超大的文件大小限制值，保证日志都冲刷到一个日志文件中，而不是触发文件大小限制导致切换文件的过程中强制刷新
-	file.SetMaxSize(1024*1024*256)
+	file.SetMaxSize(1024 * 1024 * 256)
 	record := contract.NewRecord()
 	record.Extra["extraA"] = "extra"
 	record.Extra["extraB"] = 100
 	record.Extra["extraC"] = struct {
 		Name string
-		Age uint8
+		Age  uint8
 	}{
 		Name: "西门吹雪",
-		Age: 108,
+		Age:  108,
 	}
 	record.Channel = "channel"
 	record.Message = "message"
 	record.Context = struct {
 		A string
-		B struct{
+		B struct {
 			C int
 		}
 	}{A: "context", B: struct {
@@ -327,13 +326,13 @@ func TestFileAsyncTicker(t *testing.T) {
 		file.Handle(tmp)
 	}
 	//等待四秒，让定时器定时刷新数据到磁盘
-	<- time.After(time.Second*4)
+	<-time.After(time.Second * 4)
 	if m, err := filepath.Glob(filepath.Join(path, "*.log")); err != nil {
 		t.Error("获取日志处理的结果失败：", err)
-	}else if len(m) != 1 {
+	} else if len(m) != 1 {
 		t.Error("获取日志处理的输出结果不一致：", err)
 	}
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	if err := os.RemoveAll(path); err != nil {
@@ -341,9 +340,9 @@ func TestFileAsyncTicker(t *testing.T) {
 	}
 }
 
-//测试异步缓冲日志按限制大小切割，强制落盘
+// 测试异步缓冲日志按限制大小切割，强制落盘
 func TestFileAsyncSpilt(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
@@ -357,16 +356,16 @@ func TestFileAsyncSpilt(t *testing.T) {
 	record.Extra["extraB"] = 100
 	record.Extra["extraC"] = struct {
 		Name string
-		Age uint8
+		Age  uint8
 	}{
 		Name: "西门吹雪",
-		Age: 108,
+		Age:  108,
 	}
 	record.Channel = "channel"
 	record.Message = "message"
 	record.Context = struct {
 		A string
-		B struct{
+		B struct {
 			C int
 		}
 	}{A: "context", B: struct {
@@ -381,10 +380,10 @@ func TestFileAsyncSpilt(t *testing.T) {
 	//日志关闭之前检查输出结果，同时因为定时刷新的时间过长，所以这些输出文件
 	if m, err := filepath.Glob(filepath.Join(path, "*.log")); err != nil {
 		t.Error("获取日志处理的结果失败：", err)
-	}else if len(m) != 4 {
+	} else if len(m) != 4 {
 		t.Error("获取日志处理的输出结果不一致：", err)
 	}
-	if err  := file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Error("日志处理测试失败：", err)
 	}
 	if err := os.RemoveAll(path); err != nil {
@@ -392,9 +391,9 @@ func TestFileAsyncSpilt(t *testing.T) {
 	}
 }
 
-//测试异步并发写入与关闭
+// 测试异步并发写入与关闭
 func TestFileAsyncConcurrent(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
@@ -404,10 +403,10 @@ func TestFileAsyncConcurrent(t *testing.T) {
 	//设置一个2MiB的缓冲器，每三秒定时刷新一次
 	file.SetBuffer(1024*1024*2, time.Second*3)
 	//设置一个适中的文件大小限制值，保证日志有切割的机会
-	file.SetMaxSize(1024*1024*10)
+	file.SetMaxSize(1024 * 1024 * 10)
 	wg := &sync.WaitGroup{}
 	//并发写入日志
-	for i:=0 ; i<10; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -416,23 +415,23 @@ func TestFileAsyncConcurrent(t *testing.T) {
 			record.Extra["extraB"] = 100
 			record.Extra["extraC"] = struct {
 				Name string
-				Age uint8
+				Age  uint8
 			}{
 				Name: "西门吹雪",
-				Age: 108,
+				Age:  108,
 			}
 			record.Channel = "channel"
 			record.Message = "message"
 			record.Context = struct {
 				A string
-				B struct{
+				B struct {
 					C int
 				}
 			}{A: "context", B: struct {
 				C int
 			}{C: 100}}
 			level := []contract.Level{contract.LevelDebug, contract.LevelInfo, contract.LevelError, contract.LevelAlert}
-			for i:=0; i<100000000; i++ {
+			for i := 0; i < 100000000; i++ {
 				for _, v := range level {
 					tmp := &(*record)
 					tmp.Level = contract.GetNameByLevel(v)
@@ -445,11 +444,11 @@ func TestFileAsyncConcurrent(t *testing.T) {
 		}()
 	}
 	//并发关闭日志处理器
-	for i:=0 ; i<10; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-time.After(10*time.Second)
+			<-time.After(10 * time.Second)
 			if err := file.Close(); err != nil {
 				t.Error("关闭日志处理器失败", err)
 			}
@@ -461,9 +460,9 @@ func TestFileAsyncConcurrent(t *testing.T) {
 	}
 }
 
-//测试同步并发写入与关闭
+// 测试同步并发写入与关闭
 func TestFileAwaitConcurrent(t *testing.T) {
-	path, err := ioutil.TempDir("./", "test")
+	path, err := os.MkdirTemp("./", "test")
 	if err != nil {
 		t.Error("构建临时目录失败")
 	}
@@ -471,10 +470,10 @@ func TestFileAwaitConcurrent(t *testing.T) {
 	//设置强制冒泡，当异步冲刷协程收到close信号后会返回false
 	file.SetBubble(true)
 	//设置一个适中的文件大小限制值，保证日志有切割的机会
-	file.SetMaxSize(1024*1024*10)
+	file.SetMaxSize(1024 * 1024 * 10)
 	wg := &sync.WaitGroup{}
 	//并发写入日志
-	for i:=0 ; i<10; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -483,23 +482,23 @@ func TestFileAwaitConcurrent(t *testing.T) {
 			record.Extra["extraB"] = 100
 			record.Extra["extraC"] = struct {
 				Name string
-				Age uint8
+				Age  uint8
 			}{
 				Name: "西门吹雪",
-				Age: 108,
+				Age:  108,
 			}
 			record.Channel = "channel"
 			record.Message = "message"
 			record.Context = struct {
 				A string
-				B struct{
+				B struct {
 					C int
 				}
 			}{A: "context", B: struct {
 				C int
 			}{C: 100}}
 			level := []contract.Level{contract.LevelDebug, contract.LevelInfo, contract.LevelError, contract.LevelAlert}
-			for i:=0; i<100000000; i++ {
+			for i := 0; i < 100000000; i++ {
 				for _, v := range level {
 					tmp := &(*record)
 					tmp.Level = contract.GetNameByLevel(v)
@@ -512,11 +511,11 @@ func TestFileAwaitConcurrent(t *testing.T) {
 		}()
 	}
 	//并发关闭日志处理器
-	for i:=0 ; i<10; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-time.After(10*time.Second)
+			<-time.After(10 * time.Second)
 			if err := file.Close(); err != nil {
 				t.Error("关闭日志处理器失败", err)
 			}

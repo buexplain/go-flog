@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"github.com/buexplain/go-flog/contract"
 	formatter2 "github.com/buexplain/go-flog/formatter"
-	"io/ioutil"
+	"io"
 	libLog "log"
 	"net/http"
 	"net/url"
@@ -36,7 +36,7 @@ func NewHTTP(level contract.Level, formatter contract.Formatter, url string) *HT
 	tmp.header = make(http.Header, 0)
 	if _, ok := formatter.(*formatter2.JSON); ok {
 		tmp.header.Set("Content-Type", "application/json; charset=utf-8")
-	}else {
+	} else {
 		tmp.header.Set("Content-Type", "text/plain; charset=utf-8")
 	}
 	tmp.timeout = 5 * time.Second
@@ -89,11 +89,15 @@ func (r *HTTP) Handle(record *contract.Record) bool {
 		libLog.Println(err)
 		return false
 	}
-	request.Body = ioutil.NopCloser(buf)
+	request.Body = io.NopCloser(buf)
 
 	client := http.Client{Timeout: r.timeout}
-	_, err = client.Do(request)
-	if err != nil {
+	var resp *http.Response
+	resp, err = client.Do(request)
+
+	if err == nil {
+		_ = resp.Body.Close()
+	} else {
 		if e, ok := err.(*url.Error); !ok || !e.Timeout() {
 			libLog.Println(err)
 		}

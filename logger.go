@@ -54,7 +54,7 @@ func (r *Logger) Async(capacity int) {
 	}
 }
 
-//日志异步写入go程
+// 日志异步写入go程
 func (r *Logger) goF() {
 	defer func() {
 		if a := recover(); a != nil {
@@ -242,6 +242,13 @@ func (r *Logger) AddRecord(level contract.Level, format bool, message string, co
 }
 
 func (r *Logger) dispatch(record *contract.Record) {
+	defer func() {
+		//捕获所有异常，即便日志崩溃，也不影响进程
+		err := recover()
+		if err != nil {
+			libLog.Println(err)
+		}
+	}()
 	for _, v := range r.handlers {
 		if v.IsHandling(contract.GetLevelByName(record.Level)) {
 			if v.Handle(record) {
@@ -278,7 +285,7 @@ func (r *Logger) CriticalF(format string, v ...interface{}) {
 	r.AddRecord(contract.LevelCritical, true, format, v...)
 }
 
-//错误
+// 错误
 func (r *Logger) Error(message string, context ...interface{}) {
 	r.AddRecord(contract.LevelError, false, message, context...)
 }

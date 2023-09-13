@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/buexplain/go-flog/contract"
-	"io/ioutil"
+	"io"
 	libLog "log"
 	"net/http"
 	"net/url"
@@ -20,7 +20,7 @@ type Robot struct {
 	secret    []byte
 	formatter contract.Formatter
 	recordCh  chan contract.Record
-	closed chan struct{}
+	closed    chan struct{}
 }
 
 func NewRobot(url string, secret string, formatter contract.Formatter, capacity int) *Robot {
@@ -52,7 +52,7 @@ func (r *Robot) gof() {
 				//如果异常退出，则间隔一段时间后重启动一条协程
 				<-time.After(10 * time.Second)
 				r.gof()
-			}else {
+			} else {
 				close(r.recordCh)
 			}
 		}()
@@ -70,23 +70,26 @@ func (r *Robot) gof() {
 				select {
 				case <-r.closed:
 					return
-				case record := <- r.recordCh:
+				case record := <-r.recordCh:
 					buf, err = r.formatter.ToBuffer(&record)
 					if err != nil {
 						libLog.Println(err)
 						break
 					}
-					req, err = http.NewRequest(http.MethodPost, r.makeURL(), ioutil.NopCloser(buf))
+					req, err = http.NewRequest(http.MethodPost, r.makeURL(), io.NopCloser(buf))
 					if err != nil {
 						libLog.Println(err)
 						break
 					}
 					req.Header.Add("Content-Type", "application/json;charset=utf-8")
 					client := http.Client{Timeout: time.Second * 5}
-					if _, err := client.Do(req); err != nil {
+					var resp *http.Response
+					if resp, err = client.Do(req); err != nil {
 						if e, ok := err.(*url.Error); !ok || !e.Timeout() {
 							libLog.Println(err)
 						}
+					} else {
+						_ = resp.Body.Close()
 					}
 				}
 			}

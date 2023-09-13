@@ -82,7 +82,7 @@ func (r *File) SetBuffer(size int, flush time.Duration) {
 	}
 }
 
-//定时冲刷缓冲区
+// 定时冲刷缓冲区
 func (r *File) goF() {
 	ticker := time.NewTicker(r.flush)
 	defer ticker.Stop()
@@ -134,13 +134,13 @@ func (r *File) GetPath() string {
 	return r.path
 }
 
-func (r *File) SetPrefix(prefix string)  {
+func (r *File) SetPrefix(prefix string) {
 	if prefix == "" {
 		r.prefix = prefix
 		return
 	}
 	if match, _ := regexp.MatchString(`^[A-Za-z_0-9]+$`, prefix); !match {
-		libLog.Panicln(errors.New("invalid argument: "+prefix))
+		libLog.Panicln(errors.New("invalid argument: " + prefix))
 	}
 	r.prefix = prefix
 }
@@ -193,7 +193,7 @@ func (r *File) IsHandling(level contract.Level) bool {
 	return level <= r.level
 }
 
-//找到日期下最后一个日志文件的索引值
+// 找到日期下最后一个日志文件的索引值
 func (r *File) findLogNameLastIndex(layout string) (index int, err error) {
 	var entries []os.DirEntry
 	entries, err = os.ReadDir(r.path)
@@ -225,8 +225,8 @@ func (r *File) scanLogName(t time.Time) (name string, err error) {
 	var layout string
 	if r.prefix == "" {
 		layout = "2006-01-02"
-	}else {
-		layout = r.prefix+"-2006-01-02"
+	} else {
+		layout = r.prefix + "-2006-01-02"
 	}
 	index, err = r.findLogNameLastIndex(t.Format(layout))
 	if err != nil {
